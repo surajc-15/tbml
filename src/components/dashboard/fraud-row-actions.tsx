@@ -24,7 +24,7 @@ type StrApiResponse = {
   };
 };
 
-function toDisplayText(value: unknown, fallback: string) {
+function toDisplayText(value: unknown, fallback: string): string {
   if (typeof value === "string") {
     return value;
   }
