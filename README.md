@@ -16,6 +16,20 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Environment Variables
+
+Create a `.env` file with:
+
+```dotenv
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=llama-3.3-70b-versatile
+RESEND_API_KEY=your_resend_api_key
+RESEND_FROM_EMAIL=alerts@surajc.in
+COMPLIANCE_TEAM_EMAIL=compliance@your-domain.com
+# Optional fallback when originatingBankEmail is missing
+DEFAULT_ORIGINATING_BANK_EMAIL=bank-ops@your-domain.com
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
