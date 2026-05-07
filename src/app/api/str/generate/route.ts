@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserRole } from "@/lib/getUserRole";
 
 type Payload = {
   accountHolder: string;
@@ -89,6 +90,12 @@ const normalizeModelSection = (title: string, value: unknown, fallback: string):
 
 export async function POST(request: Request) {
   try {
+    // Ensure the caller is an authenticated, onboarded user.
+    const role = await getUserRole();
+    if (!role) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
     const payload = (await request.json()) as Payload;
 
     if (!payload.accountHolder || !payload.transactionId) {

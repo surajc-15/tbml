@@ -48,3 +48,26 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Clerk integration and webhooks
+
+This app uses Clerk for authentication and persists users in the local Prisma database.
+
+- The app lazily syncs a signed-in user on first visit to `/dashboard` (see `src/app/dashboard/layout.tsx`).
+- A webhook handler is provided at `/api/webhooks/clerk` to create/upsert users when Clerk emits `user.created` events. Ensure you configure this webhook in your Clerk dashboard.
+
+Environment variables to set for full behavior:
+
+```dotenv
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
+CLERK_SECRET_KEY=sk_...            # used to fetch user details from Clerk API if not present in webhook
+CLERK_WEBHOOK_SECRET=whsec_...     # used to verify Clerk webhook signatures
+``` 
+
+Webhook notes:
+- Point your Clerk webhook to `https://<your-host>/api/webhooks/clerk` and enable `user.created` events.
+- If you set `CLERK_SECRET_KEY` the webhook handler will fetch missing user details from Clerk.
+
+Role management:
+- New users are upserted with a default role of `BANK_USER`. Roles are stored in the `User` Prisma model and can be read via the helper `src/lib/getUserRole.ts`.
+

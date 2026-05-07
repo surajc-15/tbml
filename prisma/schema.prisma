@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ----------------------------------------------------
+// TBML Application Tables
+// ----------------------------------------------------
+
+enum Role {
+  ADMIN
+  BANK_USER
+}
+
+model User {
+  id        String   @id @default(uuid())
+  clerkId   String   @unique
+  email     String   @unique
+  role      Role     @default(BANK_USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FlaggedTransaction {
+  transaction_id       String   @id
+  sender_id            String
+  receiver_id          String
+  amount               Float
+  reasons_for_flagging String
+  confidence_score     Float
+
+  createdAt            DateTime @default(now())
+}

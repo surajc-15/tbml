@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { AlertTriangle, BarChart3, FileWarning, ShieldCheck, WalletCards } from "lucide-react";
+import { AlertTriangle, BarChart3, FileWarning, Home, ShieldCheck, WalletCards } from "lucide-react";
 
 const links = [
   { icon: BarChart3, label: "Overview", section: "overview" },
@@ -25,7 +25,7 @@ export function Sidebar() {
 
   return (
     <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white/85 px-4 py-6 backdrop-blur-xl lg:block">
-      <div className="mb-8 rounded-xl bg-gradient-to-br from-sky-600 to-cyan-500 p-4 text-white shadow-lg shadow-sky-200">
+      <div className="mb-8 rounded-xl bg-linear-to-br from-sky-600 to-cyan-500 p-4 text-white shadow-lg shadow-sky-200">
         <p className="text-xs uppercase tracking-widest text-sky-100">Trade AML</p>
         <h1 className="mt-1 text-lg font-semibold">TBML Detection System</h1>
         <p className="mt-1 text-xs text-sky-100">Regulatory Intelligence Console</p>
@@ -47,6 +47,16 @@ export function Sidebar() {
           </Link>
         ))}
       </nav>
+
+      <div className="mt-6 border-t border-slate-200 pt-4">
+        <Link
+          href="/"
+          className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
+        >
+          <Home className="h-4 w-4" />
+          Back to Home
+        </Link>
+      </div>
     </aside>
   );
 }
