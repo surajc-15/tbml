@@ -10,10 +10,12 @@ interface NavbarProps {
   user?: {
     email: string;
     role: string;
-    username: string;
-    name: string;
-    bankName?: string;
+    username?: string | null;
+    name?: string | null;
+    bankName?: string | null;
   } | null;
+  activeSection?: string;
+  onSectionChange?: (section: string) => void;
 }
 
 const navItems = [
@@ -23,7 +25,7 @@ const navItems = [
   { path: '/about', label: 'About Us' },
 ];
 
-export function Navbar({ user }: NavbarProps) {
+export function Navbar({ user, activeSection, onSectionChange }: NavbarProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
 

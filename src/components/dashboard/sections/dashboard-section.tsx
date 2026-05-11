@@ -9,7 +9,7 @@ interface DashboardSectionProps {
   fraudMinRisk?: number;
 }
 
-export async function DashboardSection({
+export function DashboardSection({
   userRole,
   userEmail = '',
   fraudSearch = '',

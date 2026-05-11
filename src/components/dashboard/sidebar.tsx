@@ -1,23 +1,21 @@
 'use client';
 
-import { Home, BarChart3, Mail, Info, Users, LogOut, Menu, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { BarChart3, Users, LogOut, Menu, X } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
 interface SidebarProps {
-  activeSection: string;
   userRole?: string;
 }
 
 const sidebarItems = [
-  { id: 'home', label: 'Home', icon: Home },
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-  { id: 'new-user', label: 'User Management', icon: Users, adminOnly: true },
-  { id: 'contact-us', label: 'Contact', icon: Mail },
-  { id: 'about-us', label: 'About', icon: Info },
+  { path: '/dashboard', label: 'Dashboard', icon: BarChart3 },
+  { path: '/dashboard/users', label: 'User Management', icon: Users, adminOnly: true },
 ];
 
-export function Sidebar({ activeSection, userRole }: SidebarProps) {
+export function Sidebar({ userRole }: SidebarProps) {
+  const pathname = usePathname();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -53,9 +51,8 @@ export function Sidebar({ activeSection, userRole }: SidebarProps) {
 
       {/* Sidebar - Hidden on mobile by default */}
       <aside
-        className={`fixed md:relative top-0 left-0 h-full w-64 text-white transition-transform duration-300 transform md:translate-x-0 z-40 md:z-0 flex flex-col ${
-          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        }`}
+        className={`fixed md:relative top-0 left-0 h-full w-64 text-white transition-transform duration-300 transform md:translate-x-0 z-40 md:z-0 flex flex-col flex-shrink-0 ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          }`}
         style={{
           background: 'linear-gradient(180deg, #0f172a 0%, #0c1529 50%, #082f49 100%)',
           boxShadow: '4px 0 24px rgba(0,0,0,0.2)'
@@ -82,24 +79,23 @@ export function Sidebar({ activeSection, userRole }: SidebarProps) {
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           {visibleItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeSection === item.id;
+            // Exact match since dashboard/users starts with /dashboard
+            const isActive = pathname === item.path;
+
             return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  router.push(`/dashboard?section=${item.id}`);
-                  setIsOpen(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
-                  isActive
-                    ? 'bg-gradient-to-r from-sky-600 to-cyan-600 text-white shadow-lg shadow-sky-500/30'
-                    : 'text-sky-100 hover:bg-sky-700/40 hover:text-white'
-                }`}
+              <Link
+                key={item.path}
+                href={item.path}
+                onClick={() => setIsOpen(false)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${isActive
+                  ? 'bg-gradient-to-r from-sky-600 to-cyan-600 text-white shadow-lg shadow-sky-500/30'
+                  : 'text-sky-100 hover:bg-sky-700/40 hover:text-white'
+                  }`}
               >
                 <Icon size={20} className={`transition-transform flex-shrink-0 ${isActive ? 'scale-110' : ''}`} />
                 <span className="font-semibold text-sm">{item.label}</span>
                 {isActive && <div className="ml-auto w-2 h-2 rounded-full bg-sky-200 flex-shrink-0" />}
-              </button>
+              </Link>
             );
           })}
         </nav>

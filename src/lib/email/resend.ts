@@ -1,5 +1,4 @@
 import { Resend } from 'resend';
-import { renderContactNotificationEmail } from './templates'; // I will create/update this or just use simple text
 
 const resend = new Resend(process.env.RESEND_API_KEY || 're_mock_key');
 

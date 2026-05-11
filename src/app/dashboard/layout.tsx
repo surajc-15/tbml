@@ -13,8 +13,10 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="w-full flex-1 flex flex-col bg-slate-50">
-      {children}
+    <div className="w-full flex-1 flex overflow-hidden bg-slate-50">
+      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden relative">
+        {children}
+      </main>
     </div>
   );
 }
