@@ -400,7 +400,7 @@ export function FraudRowActions({ account }: { account: FraudAccount }) {
                 {/* Header section */}
                 <div className="sticky top-0 z-10 -mx-4 -mt-4 border-b border-sky-200 bg-gradient-to-r from-sky-50 via-white to-amber-50 px-4 py-5 shadow-sm">
                   <div className="flex items-start gap-4">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-sky-700 to-sky-900 text-xs font-black tracking-widest text-white shadow-md">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-linear-to-br from-sky-700 to-sky-900 text-xs font-black tracking-widest text-white shadow-md">
                       DCAF
                     </div>
                     <div className="space-y-2 flex-1">

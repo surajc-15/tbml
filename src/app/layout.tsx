@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
-import { ClerkProvider } from '@clerk/nextjs'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { ToasterProvider } from '@/components/providers/toaster-provider'
+import { Navbar } from '@/components/dashboard/navbar'
+import { getCurrentUser } from '@/lib/auth'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -19,18 +20,21 @@ export const metadata: Metadata = {
   description: "Trade-Based Money Laundering detection and compliance dashboard",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const user = await getCurrentUser();
+
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ClerkProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
+        <Navbar user={user} />
+        <main className="flex-1 flex flex-col">
           {children}
-          <ToasterProvider />
-        </ClerkProvider>
+        </main>
+        <ToasterProvider />
       </body>
     </html>
   )

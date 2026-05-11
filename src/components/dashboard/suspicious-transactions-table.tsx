@@ -55,38 +55,40 @@ export async function SuspiciousTransactionsTable({ query = "", page = 1 }: Prop
           </div>
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Transaction ID</TableHead>
-                  <TableHead>Sender</TableHead>
-                  <TableHead>Receiver</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Trade Type</TableHead>
-                  <TableHead>Suspicion Reason</TableHead>
-                  <TableHead>Risk Level</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginated.map((txn) => (
-                  <TableRow key={txn.transactionId}>
-                    <TableCell className="font-semibold text-slate-800">{txn.transactionId}</TableCell>
-                    <TableCell>{txn.sender}</TableCell>
-                    <TableCell>{txn.receiver}</TableCell>
-                    <TableCell>${txn.amount.toLocaleString()}</TableCell>
-                    <TableCell>{txn.tradeType}</TableCell>
-                    <TableCell className="max-w-80 text-pretty">{txn.suspicionReason}</TableCell>
-                    <TableCell>
-                      <Badge variant="suspicious">Medium</Badge>
-                    </TableCell>
-                    <TableCell className="min-w-[640px]">
-                      <SuspiciousRowActions transaction={txn} />
-                    </TableCell>
+            <div className="overflow-x-auto w-full">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Transaction ID</TableHead>
+                    <TableHead>Sender</TableHead>
+                    <TableHead>Receiver</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Trade Type</TableHead>
+                    <TableHead>Suspicion Reason</TableHead>
+                    <TableHead>Risk Level</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginated.map((txn) => (
+                    <TableRow key={txn.transactionId}>
+                      <TableCell className="font-semibold text-slate-800">{txn.transactionId}</TableCell>
+                      <TableCell>{txn.sender}</TableCell>
+                      <TableCell>{txn.receiver}</TableCell>
+                      <TableCell>${txn.amount.toLocaleString()}</TableCell>
+                      <TableCell>{txn.tradeType}</TableCell>
+                      <TableCell className="max-w-80 text-pretty">{txn.suspicionReason}</TableCell>
+                      <TableCell>
+                        <Badge variant="suspicious">Medium</Badge>
+                      </TableCell>
+                      <TableCell className="min-w-[640px]">
+                        <SuspiciousRowActions transaction={txn} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
             <PaginationControls pageParam="suspiciousPage" currentPage={currentPage} totalPages={totalPages} />
           </>
         )}

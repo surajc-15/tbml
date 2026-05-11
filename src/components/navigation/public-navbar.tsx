@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SignInButton, SignUpButton, UserButton, useAuth } from "@clerk/nextjs";
 
 export function PublicNavbar() {
   const pathname = usePathname();
-  const { isSignedIn } = useAuth();
 
   const links = [
     { name: "Home", href: "/" },
@@ -21,7 +19,7 @@ export function PublicNavbar() {
           {/* Logo / Title */}
           <div className="flex-shrink-0 flex items-center">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-600 to-cyan-500 shadow-md shadow-sky-200 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-linear-to-br from-sky-600 to-cyan-500 shadow-md shadow-sky-200 flex items-center justify-center">
                 <span className="text-white font-bold text-xs">TB</span>
               </div>
               <span className="font-semibold text-xl text-slate-900 tracking-tight">TBML Detect</span>
@@ -42,34 +40,15 @@ export function PublicNavbar() {
                 {link.name}
               </Link>
             ))}
-            {isSignedIn && (
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-sky-600 hover:border-sky-300 hover:text-sky-800 transition-colors"
-              >
-                Dashboard
-              </Link>
-            )}
           </nav>
 
-          {/* Auth Buttons */}
           <div className="flex items-center gap-4">
-            {!isSignedIn ? (
-              <>
-                <SignInButton mode="modal">
-                  <button className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors">
-                    Sign in
-                  </button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button className="bg-sky-600 hover:bg-sky-700 text-white rounded-full font-medium text-sm px-5 py-2 transition-colors shadow-sm">
-                    Get Started
-                  </button>
-                </SignUpButton>
-              </>
-            ) : (
-              <UserButton afterSignOutUrl="/" />
-            )}
+            <Link
+              href="/sign-in"
+              className="bg-sky-600 hover:bg-sky-700 text-white rounded-full font-medium text-sm px-5 py-2 transition-colors shadow-sm"
+            >
+              Sign in
+            </Link>
           </div>
         </div>
       </div>

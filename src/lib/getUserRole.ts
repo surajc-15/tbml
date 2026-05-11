@@ -1,13 +1,8 @@
-import { auth } from '@clerk/nextjs/server';
-import { prisma } from '@/lib/prisma';
+import { getCurrentUser } from '@/lib/auth';
 
 export async function getUserRole() {
-  const authObj = await auth();
-  const userId = authObj.userId;
-  if (!userId) return null;
-
-  const dbUser = await prisma.user.findUnique({ where: { clerkId: userId } });
-  return dbUser?.role ?? null;
+  const session = await getCurrentUser();
+  return session?.role ?? null;
 }
 
 export default getUserRole;

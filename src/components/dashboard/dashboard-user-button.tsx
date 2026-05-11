@@ -1,15 +1,22 @@
 "use client";
 
-import dynamic from "next/dynamic";
-
-const ClerkUserButton = dynamic(
-  () => import("@clerk/nextjs").then((mod) => mod.UserButton),
-  {
-    ssr: false,
-    loading: () => <div className="h-9 w-9 rounded-full bg-slate-200" aria-hidden="true" />,
-  }
-);
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 
 export function DashboardUserButton() {
-  return <ClerkUserButton afterSignOutUrl="/" />;
+  const router = useRouter();
+
+  const signOut = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    toast.success('Signed out successfully.');
+    router.push('/sign-in');
+    router.refresh();
+  };
+
+  return (
+    <Button variant="outline" onClick={() => void signOut()}>
+      Sign out
+    </Button>
+  );
 }

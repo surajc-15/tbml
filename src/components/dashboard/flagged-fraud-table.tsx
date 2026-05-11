@@ -63,40 +63,42 @@ export async function FlaggedFraudTable({ query = "", page = 1, minRisk = 80 }: 
           </div>
         ) : (
           <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Account ID</TableHead>
-                  <TableHead>Account Holder Name</TableHead>
-                  <TableHead>Transaction ID</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Country</TableHead>
-                  <TableHead>Risk Score</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginated.map((account) => (
-                  <TableRow key={account.transactionId}>
-                    <TableCell className="font-semibold text-slate-800">{account.accountId}</TableCell>
-                    <TableCell>{account.holderName}</TableCell>
-                    <TableCell>{account.transactionId}</TableCell>
-                    <TableCell>${account.amount.toLocaleString()}</TableCell>
-                    <TableCell>{account.country}</TableCell>
-                    <TableCell>
-                      <span className="font-semibold text-rose-600">{account.riskScore}/100</span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="fraud">High Fraud Risk</Badge>
-                    </TableCell>
-                    <TableCell className="min-w-[560px]">
-                      <FraudRowActions account={account} />
-                    </TableCell>
+            <div className="overflow-x-auto w-full">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Account ID</TableHead>
+                    <TableHead>Account Holder Name</TableHead>
+                    <TableHead>Transaction ID</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Country</TableHead>
+                    <TableHead>Risk Score</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginated.map((account) => (
+                    <TableRow key={account.transactionId}>
+                      <TableCell className="font-semibold text-slate-800">{account.accountId}</TableCell>
+                      <TableCell>{account.holderName}</TableCell>
+                      <TableCell>{account.transactionId}</TableCell>
+                      <TableCell>${account.amount.toLocaleString()}</TableCell>
+                      <TableCell>{account.country}</TableCell>
+                      <TableCell>
+                        <span className="font-semibold text-rose-600">{account.riskScore}/100</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="fraud">High Fraud Risk</Badge>
+                      </TableCell>
+                      <TableCell className="min-w-[560px]">
+                        <FraudRowActions account={account} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
             <PaginationControls pageParam="fraudPage" currentPage={currentPage} totalPages={totalPages} />
           </>
         )}

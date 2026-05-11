@@ -1,14 +1,33 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextResponse, type NextRequest } from 'next/server'
+import { verifyAuthToken } from '@/lib/auth'
 
-const isProtectedRoute = createRouteMatcher([
-  '/dashboard(.*)',
-])
+const sessionCookieName = 'tbml_session'
+const protectedPrefixes = ['/dashboard', '/api/admin']
 
-export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
-    await auth.protect()
+function isProtectedPath(pathname: string) {
+  return protectedPrefixes.some((prefix) => pathname.startsWith(prefix))
+}
+
+export function proxy(request: NextRequest) {
+  if (!isProtectedPath(request.nextUrl.pathname)) {
+    return NextResponse.next()
   }
-})
+
+  const sessionToken = request.cookies.get(sessionCookieName)?.value
+
+  if (!sessionToken || !verifyAuthToken(sessionToken)) {
+    if (request.nextUrl.pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
+    }
+
+    const url = request.nextUrl.clone()
+    url.pathname = '/sign-in'
+    url.search = ''
+    return NextResponse.redirect(url)
+  }
+
+  return NextResponse.next()
+}
 
 export const config = {
   matcher: [
