@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { buildDocumentRequestTemplate, buildFreezeAccountTemplate, buildFraudComplianceTemplate } from "@/lib/email/templates";
+
+import {
+  buildDocumentRequestTemplate,
+  buildFreezeAccountTemplate,
+} from "@/lib/email/templates";
+
 import type { FraudAccount } from "@/types/aml";
 import { prisma } from "@/lib/prisma";
 
@@ -11,170 +16,173 @@ type ActionPayload = {
   account?: FraudAccount;
 };
 
-const hasString = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+const hasString = (
+  value: unknown
+): value is string =>
+  typeof value === "string" &&
+  value.trim().length > 0;
 
-const normalizeEnv = (value: string | undefined): string | undefined => {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-};
+const isValidAccount = (
+  value: unknown
+): value is FraudAccount => {
+  if (!value || typeof value !== "object")
+    return false;
 
-const isPlaceholderEmail = (email: string): boolean => email.toLowerCase().endsWith(".example");
+  const account = value as Record<
+    string,
+    unknown
+  >;
 
-const toProviderErrorText = (value: unknown): string | undefined => {
-  if (!value) return undefined;
-  if (typeof value === "string") return value;
-  if (typeof value === "object") {
-    const err = value as Record<string, unknown>;
-    const name = typeof err.name === "string" ? err.name : "ProviderError";
-    const message = typeof err.message === "string" ? err.message : undefined;
-    return message ? `${name}: ${message}` : name;
-  }
-  return undefined;
-};
-
-const isValidAccount = (value: unknown): value is FraudAccount => {
-  if (!value || typeof value !== "object") return false;
-  const account = value as Record<string, unknown>;
   return (
-    hasString(account.accountId) &&
-    hasString(account.holderName) &&
     hasString(account.transactionId) &&
     typeof account.amount === "number"
   );
 };
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request
+) {
   try {
-    const payload = (await request.json()) as ActionPayload;
-    const actionType = payload.actionType ?? "freeze";
+    const payload =
+      (await request.json()) as ActionPayload;
+
+    const actionType =
+      payload.actionType ?? "freeze";
 
     if (!isValidAccount(payload.account)) {
-      return NextResponse.json({ error: "Invalid account payload." }, { status: 400 });
-    }
-
-    const resendApiKey = normalizeEnv(process.env.RESEND_API_KEY);
-    const fromEmail = normalizeEnv(process.env.RESEND_FROM_EMAIL);
-    const defaultSenderBankEmail = normalizeEnv(process.env.DEFAULT_ORIGINATING_BANK_EMAIL);
-    const defaultReceiverBankEmail =
-      normalizeEnv(process.env.DEFAULT_RECEIVER_BANK_EMAIL) ?? normalizeEnv(process.env.DEFAULT_ORIGINATING_BANK_EMAIL);
-
-    if (!resendApiKey || !fromEmail) {
       return NextResponse.json(
         {
-          error: "Missing email configuration. Required: RESEND_API_KEY and RESEND_FROM_EMAIL.",
+          error: "Invalid account payload.",
         },
-        { status: 500 },
+        { status: 400 }
       );
     }
 
-    const senderBankEmail =
-      payload.account.originatingBankEmail && !isPlaceholderEmail(payload.account.originatingBankEmail)
-        ? payload.account.originatingBankEmail
-        : defaultSenderBankEmail;
-    const receiverBankEmail = defaultReceiverBankEmail;
+    const account = payload.account;
 
-    if (!senderBankEmail || !receiverBankEmail) {
+    // =========================
+    // Find STR Report
+    // =========================
+    const report =
+      await prisma.sTRReport.findUnique({
+        where: {
+          transactionId:
+            account.transactionId,
+        },
+
+        select: {
+          createdById: true,
+        },
+      });
+
+    if (!report?.createdById) {
       return NextResponse.json(
         {
           error:
-            "Missing sender/receiver bank emails. Set DEFAULT_ORIGINATING_BANK_EMAIL and DEFAULT_RECEIVER_BANK_EMAIL.",
+            "No STR report found for this transaction.",
         },
-        { status: 500 },
+        { status: 404 }
       );
     }
 
-    const senderBankName = payload.account.originatingBank || "Sender Bank";
-    const receiverBankName = "Receiver Bank";
-    const senderTemplate =
-      actionType === "documents"
-        ? buildDocumentRequestTemplate(payload.account, senderBankName, "Sender")
-        : buildFreezeAccountTemplate(payload.account, senderBankName, "Sender");
-    const receiverTemplate =
-      actionType === "documents"
-        ? buildDocumentRequestTemplate(payload.account, receiverBankName, "Receiver")
-        : buildFreezeAccountTemplate(payload.account, receiverBankName, "Receiver");
-
-    const resend = new Resend(resendApiKey);
-    const [senderResult, receiverResult] = await Promise.all([
-      resend.emails.send({
-        from: fromEmail,
-        to: senderBankEmail,
-        subject: senderTemplate.subject,
-        html: senderTemplate.html,
-        text: senderTemplate.text,
-      }),
-      resend.emails.send({
-        from: fromEmail,
-        to: receiverBankEmail,
-        subject: receiverTemplate.subject,
-        html: receiverTemplate.html,
-        text: receiverTemplate.text,
-      }),
-    ]);
-
-    if (senderResult.error || receiverResult.error) {
-      return NextResponse.json(
-        {
-          error: "Action email dispatch failed.",
-          senderError: toProviderErrorText(senderResult.error),
-          receiverError: toProviderErrorText(receiverResult.error),
-          note: "Check email recipients and RESEND_FROM_EMAIL domain verification.",
+    // =========================
+    // Find STR Creator
+    // =========================
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: report.createdById,
         },
-        { status: 502 },
-      );
-    }
-    // Also notify the STR report creator (if any) about this admin action
-    let creatorNotify: { success: boolean; email?: string; note?: string } | null = null;
-    try {
-      const report = await prisma.sTRReport.findUnique({
-        where: { transactionId: payload.account!.transactionId },
-        select: { createdById: true, reportMarkdown: true },
+
+        select: {
+          email: true,
+          name: true,
+        },
       });
 
-      if (report?.createdById) {
-        const user = await prisma.user.findUnique({ where: { id: report.createdById }, select: { email: true } });
-        if (user?.email) {
-          // Use existing compliance template to notify the STR creator
-          const pseudoReport = {
-            executiveSummary: report.reportMarkdown ?? "STR details available in dashboard.",
-            transactionDetails: "",
-            riskIndicators: "",
-            recommendation: "",
-          } as any;
+    if (!user?.email) {
+      return NextResponse.json(
+        {
+          error:
+            "STR creator email not found.",
+        },
+        { status: 404 }
+      );
+    }
 
-          const creatorTemplate = buildFraudComplianceTemplate(payload.account!, pseudoReport as any);
+    // =========================
+    // Build Email Template
+    // =========================
+    let template;
 
-          const creatorResult = await resend.emails.send({
-            from: fromEmail,
-            to: user.email,
-            subject: creatorTemplate.subject,
-            html: creatorTemplate.html,
-            text: creatorTemplate.text,
-          });
+    if (actionType === "documents") {
+      template =
+        buildDocumentRequestTemplate(
+          account
+        );
+    } else {
+      template =
+        buildFreezeAccountTemplate(
+          account
+        );
+    }
 
-          if (creatorResult.error) {
-            creatorNotify = { success: false, email: user.email, note: toProviderErrorText(creatorResult.error) };
-          } else {
-            creatorNotify = { success: true, email: user.email };
-          }
-        } else {
-          creatorNotify = { success: false, note: "Creator user has no email." };
-        }
-      }
-    } catch (err) {
-      creatorNotify = { success: false, note: "Failed to notify creator." };
+    // =========================
+    // Send Email
+    // =========================
+    const resend = new Resend(
+      process.env.RESEND_API_KEY
+    );
+
+    const result =
+      await resend.emails.send({
+        from:
+          process.env
+            .REGULATOR_FROM_EMAIL ||
+          "regulator@surajc.in",
+
+        to: user.email,
+
+        subject: template.subject,
+
+        html: template.html,
+
+        text: template.text,
+      });
+
+    if (result.error) {
+      return NextResponse.json(
+        {
+          error:
+            "Failed to send email.",
+          details: result.error,
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
+      success: true,
+
       message:
-        actionType === "documents"
-          ? "Document request sent to sender and receiver banks."
-          : "Freeze request sent to sender and receiver banks.",
-      senderEmailId: senderResult.data?.id,
-      receiverEmailId: receiverResult.data?.id,
-      creatorNotify,
+        actionType === "freeze"
+          ? "Freeze notification sent successfully."
+          : "Document request sent successfully.",
+
+      email: user.email,
     });
-  } catch {
-    return NextResponse.json({ error: "Unable to process action request." }, { status: 500 });
+  } catch (error) {
+    console.error(
+      "Action processing error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          "Unable to process action request.",
+      },
+      { status: 500 }
+    );
   }
 }

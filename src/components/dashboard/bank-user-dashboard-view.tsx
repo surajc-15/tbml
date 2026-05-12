@@ -32,9 +32,9 @@ export function BankUserDashboardView({
           </p>
         </section>
 
-        <section className="w-full">
+        {/* <section className="w-full">
           <AdminUserForm createdBy={userBank || 'Bank user'} />
-        </section>
+        </section> */}
 
         {/* Fraud Transactions - shown first */}
         <FlaggedFraudTable
