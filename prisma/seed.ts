@@ -1,549 +1,127 @@
-import { PrismaClient } from "@prisma/client";
-import { Pool } from "pg";
-import { PrismaPg } from "@prisma/adapter-pg";
-import "dotenv/config";
+const { PrismaClient } = require("@prisma/client");
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
+const { Pool } = require("pg");
+
+const { PrismaPg } = require("@prisma/adapter-pg");
+
+require("dotenv/config");
+
+const auditData = require("./aml_audit_log_202605121542.json");
 
 async function main() {
-  console.log("Seeding database...");
+  const connectionString =
+    process.env.DIRECT_URL ||"postgresql://postgres:ROOT@localhost:5432/tbml";
 
-  console.log("Seeding Flagged Transactions...");
+  if (!connectionString) {
+    throw new Error(
+      "DIRECT_URL missing in .env"
+    );
+  }
 
-  // Seed Flagged Transactions
-  const transactions = [
-    {
-      transaction_id: "TXN-771034",
-      sender_id: "ACC-90421",
-      receiver_id: "ACC-12345",
-      amount: 1284500,
-      reasons_for_flagging: JSON.stringify(["Invoice mismatch", "Round-dollar layering", "Shell intermediary"]),
-      confidence_score: 96.5,
-    },
-    {
-      transaction_id: "TXN-771281",
-      sender_id: "ACC-55190",
-      receiver_id: "ACC-67890",
-      amount: 845000,
-      reasons_for_flagging: JSON.stringify(["Rapid pass-through", "High-risk corridor"]),
-      confidence_score: 91.2,
-    },
-    {
-      transaction_id: "TXN-771416",
-      sender_id: "ACC-33489",
-      receiver_id: "ACC-11111",
-      amount: 2195000,
-      reasons_for_flagging: JSON.stringify(["Beneficial owner discrepancy", "Back-dated documentation"]),
-      confidence_score: 94.8,
-    },
-    {
-      transaction_id: "STX-202601",
-      sender_id: "ACC-99999",
-      receiver_id: "ACC-88888",
-      amount: 275000,
-      reasons_for_flagging: JSON.stringify(["Unusual unit pricing and urgent settlement request"]),
-      confidence_score: 82.1,
-    },
-  ];
+  const pool = new Pool({
+    connectionString,
+  });
 
-  for (const txn of transactions) {
-    await prisma.aml_audit_log.upsert({
-      where: { transactionId: txn.transaction_id },
-      update: {},
-      create: {
-        transactionId: txn.transaction_id,
-        senderAccount: txn.sender_id,
-        receiverAccount: txn.receiver_id,
-        amount: txn.amount,
-        verdict: "fraud",
-        confidenceScore: txn.confidence_score,
-        strMetadata: {
-          reasons_for_flagging: JSON.parse(txn.reasons_for_flagging),
+  const adapter = new PrismaPg(pool);
+
+  const prisma = new PrismaClient({
+    adapter,
+  });
+
+  try {
+    console.log(
+      "Starting data insertion..."
+    );
+
+    for (const tx of auditData.aml_audit_log) {
+      await prisma.aml_audit_log.upsert({
+        where: {
+          transactionId:
+            tx.transaction_id,
         },
-        actionTaken: "Escalated for review",
-      },
-    });
+
+        update: {
+          senderAccount:
+            tx.sender_account,
+
+          receiverAccount:
+            tx.receiver_account,
+
+          amount: tx.amount,
+
+          verdict: tx.verdict,
+
+          confidenceScore:
+            tx.confidence_score,
+
+          strMetadata:
+            typeof tx.str_metadata ===
+            "string"
+              ? JSON.parse(
+                  tx.str_metadata
+                )
+              : tx.str_metadata,
+
+          actionTaken:
+            tx.action_taken,
+
+          loggedAt: new Date(
+            tx.logged_at
+          ),
+        },
+
+        create: {
+          transactionId:
+            tx.transaction_id,
+
+          senderAccount:
+            tx.sender_account,
+
+          receiverAccount:
+            tx.receiver_account,
+
+          amount: tx.amount,
+
+          verdict: tx.verdict,
+
+          confidenceScore:
+            tx.confidence_score,
+
+          strMetadata:
+            typeof tx.str_metadata ===
+            "string"
+              ? JSON.parse(
+                  tx.str_metadata
+                )
+              : tx.str_metadata,
+
+          actionTaken:
+            tx.action_taken,
+
+          loggedAt: new Date(
+            tx.logged_at
+          ),
+        },
+      });
+
+      console.log(
+        `Inserted: ${tx.transaction_id}`
+      );
+    }
+
+    console.log(
+      "All transactions inserted successfully."
+    );
+  } catch (error) {
+    console.error(
+      "Insertion failed:",
+      error
+    );
+  } finally {
+    await prisma.$disconnect();
+
+    await pool.end();
   }
-
-  console.log("Seeding Live Audit Logs...");
-
-  const liveAuditLogs = [
-    {
-      transactionId: "SW_LIVE_A808E6F0",
-      senderAccount: "ACC_UNKNOWN_5643",
-      receiverAccount: "ACC_000060",
-      amount: 592296.46,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 1308,
-        doc_id: "DOC_LIVE_2AAB5D9A",
-        commodity: "Electronics",
-        ais_status: "ON",
-        market_avg: 450.0,
-        unit_price: 452.83,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0062888888888888,
-        actual_weight_kg: 2874.52,
-        weight_gap_score: 0.0010703363914373089,
-        declared_weight_kg: 2877.6,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:36.349Z",
-    },
-    {
-      transactionId: "SW_LIVE_838ED68D",
-      senderAccount: "ACC_UNKNOWN_5468",
-      receiverAccount: "ACC_000022",
-      amount: 92476.52,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 736,
-        doc_id: "DOC_LIVE_372F653A",
-        commodity: "Scrap Metal",
-        ais_status: "ON",
-        market_avg: 120.0,
-        unit_price: 125.65,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0470833333333334,
-        actual_weight_kg: 1601.43,
-        weight_gap_score: 0.010974555335968379,
-        declared_weight_kg: 1619.2,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:38.982Z",
-    },
-    {
-      transactionId: "SW_LIVE_0C98D43E",
-      senderAccount: "ACC_000093",
-      receiverAccount: "ACC_000066",
-      amount: 2133316.49,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 1725,
-        doc_id: "DOC_LIVE_F064044E",
-        commodity: "Luxury Goods",
-        ais_status: "ON",
-        market_avg: 1200.0,
-        unit_price: 1236.71,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0305916666666668,
-        actual_weight_kg: 3778.65,
-        weight_gap_score: 0.004308300395256918,
-        declared_weight_kg: 3795.0,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:41.512Z",
-    },
-    {
-      transactionId: "SW_LIVE_9CDBB840",
-      senderAccount: "ACC_UNKNOWN_9317",
-      receiverAccount: "ACC_000012",
-      amount: 97717.53,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 1940,
-        doc_id: "DOC_LIVE_48023A2E",
-        commodity: "Textiles",
-        ais_status: "ON",
-        market_avg: 50.0,
-        unit_price: 50.37,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0073999999999999,
-        actual_weight_kg: 4255.38,
-        weight_gap_score: 0.00295688847235239,
-        declared_weight_kg: 4268.0,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:43.329Z",
-    },
-    {
-      transactionId: "SW_LIVE_9619BF9A",
-      senderAccount: "ACC_000025",
-      receiverAccount: "ACC_000070",
-      amount: 2445071.79,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 1954,
-        doc_id: "DOC_LIVE_78FBEC0B",
-        commodity: "Luxury Goods",
-        ais_status: "ON",
-        market_avg: 1200.0,
-        unit_price: 1251.32,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0427666666666666,
-        actual_weight_kg: 4257.17,
-        weight_gap_score: 0.009684097887782636,
-        declared_weight_kg: 4298.8,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:45.892Z",
-    },
-    {
-      transactionId: "SW_LIVE_68A36626",
-      senderAccount: "ACC_000052",
-      receiverAccount: "ACC_000010",
-      amount: 737796.01,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 587,
-        doc_id: "DOC_LIVE_6DC50DF6",
-        commodity: "Luxury Goods",
-        ais_status: "ON",
-        market_avg: 1200.0,
-        unit_price: 1256.89,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0474083333333335,
-        actual_weight_kg: 1276.23,
-        weight_gap_score: 0.01174694130401115,
-        declared_weight_kg: 1291.4,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:48.117Z",
-    },
-    {
-      transactionId: "SW_LIVE_3A6E23B5",
-      senderAccount: "ACC_UNKNOWN_3387",
-      receiverAccount: "ACC_000072",
-      amount: 1060974.1,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 904,
-        doc_id: "DOC_LIVE_8C9B7CDC",
-        commodity: "Luxury Goods",
-        ais_status: "ON",
-        market_avg: 1200.0,
-        unit_price: 1173.64,
-        port_log_status: "VERIFIED",
-        price_deviation: 0.9780333333333334,
-        actual_weight_kg: 1986.4,
-        weight_gap_score: 0.0012067578439259854,
-        declared_weight_kg: 1988.8,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:51.412Z",
-    },
-    {
-      transactionId: "SW_LIVE_A9C7D47B",
-      senderAccount: "ACC_000024",
-      receiverAccount: "ACC_000042",
-      amount: 9854.99,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 82,
-        doc_id: "DOC_LIVE_51C14DDB",
-        commodity: "Scrap Metal",
-        ais_status: "ON",
-        market_avg: 120.0,
-        unit_price: 120.18,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0015,
-        actual_weight_kg: 179.91,
-        weight_gap_score: 0.0027161862527716185,
-        declared_weight_kg: 180.4,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:53.220Z",
-    },
-    {
-      transactionId: "SW_LIVE_DEDB46BB",
-      senderAccount: "ACC_000079",
-      receiverAccount: "ACC_000078",
-      amount: 94076.17,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 1957,
-        doc_id: "DOC_LIVE_C0F8EB2E",
-        commodity: "Textiles",
-        ais_status: "ON",
-        market_avg: 50.0,
-        unit_price: 48.07,
-        port_log_status: "VERIFIED",
-        price_deviation: 0.9614,
-        actual_weight_kg: 4291.5,
-        weight_gap_score: 0.0032285037394899434,
-        declared_weight_kg: 4305.4,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:54.796Z",
-    },
-    {
-      transactionId: "SW_LIVE_7148C416",
-      senderAccount: "ACC_000022",
-      receiverAccount: "ACC_000050",
-      amount: 541345.37,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 1167,
-        doc_id: "DOC_LIVE_0858D39F",
-        commodity: "Electronics",
-        ais_status: "ON",
-        market_avg: 450.0,
-        unit_price: 463.88,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0308444444444445,
-        actual_weight_kg: 2544.14,
-        weight_gap_score: 0.009059749162576927,
-        declared_weight_kg: 2567.4,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:58.137Z",
-    },
-    {
-      transactionId: "SW_LIVE_550C17E0",
-      senderAccount: "ACC_000085",
-      receiverAccount: "ACC_000003",
-      amount: 5385.49,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 43,
-        doc_id: "DOC_LIVE_35B61EA1",
-        commodity: "Scrap Metal",
-        ais_status: "ON",
-        market_avg: 120.0,
-        unit_price: 125.24,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0436666666666665,
-        actual_weight_kg: 92.82,
-        weight_gap_score: 0.018816067653276956,
-        declared_weight_kg: 94.6,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:11:59.808Z",
-    },
-    {
-      transactionId: "SW_LIVE_B0B30F4D",
-      senderAccount: "ACC_000021",
-      receiverAccount: "ACC_000074",
-      amount: 37116.88,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 742,
-        doc_id: "DOC_LIVE_6F6893DE",
-        commodity: "Textiles",
-        ais_status: "ON",
-        market_avg: 50.0,
-        unit_price: 50.02,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0004,
-        actual_weight_kg: 1617.46,
-        weight_gap_score: 0.00915216858613085,
-        declared_weight_kg: 1632.4,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:12:01.692Z",
-    },
-    {
-      transactionId: "SW_LIVE_53FBAD7F",
-      senderAccount: "ACC_000007",
-      receiverAccount: "ACC_000035",
-      amount: 93383.15,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 803,
-        doc_id: "DOC_LIVE_29C63512",
-        commodity: "Scrap Metal",
-        ais_status: "ON",
-        market_avg: 120.0,
-        unit_price: 116.29,
-        port_log_status: "VERIFIED",
-        price_deviation: 0.9690833333333334,
-        actual_weight_kg: 1761.27,
-        weight_gap_score: 0.0030170949847164045,
-        declared_weight_kg: 1766.6,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:12:04.213Z",
-    },
-    {
-      transactionId: "SW_LIVE_10344718",
-      senderAccount: "ACC_000029",
-      receiverAccount: "ACC_000056",
-      amount: 298188.47,
-      verdict: "WATCHLIST",
-      confidenceScore: 94.27,
-      strMetadata: {
-        qty: 383,
-        doc_id: "DOC_LIVE_75DD950C",
-        commodity: "Electronics",
-        ais_status: "ON",
-        market_avg: 450.0,
-        unit_price: 778.56,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.7301333333333333,
-        actual_weight_kg: 793.44,
-        weight_gap_score: 0.05834322335627818,
-        declared_weight_kg: 842.6,
-      },
-      actionTaken: "Transaction held for manual audit.",
-      loggedAt: "2026-05-09T06:12:07.659Z",
-    },
-    {
-      transactionId: "SW_LIVE_783407A6",
-      senderAccount: "ACC_000095",
-      receiverAccount: "ACC_000074",
-      amount: 548330.98,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 1175,
-        doc_id: "DOC_LIVE_2A629182",
-        commodity: "Electronics",
-        ais_status: "ON",
-        market_avg: 450.0,
-        unit_price: 466.66,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0370222222222223,
-        actual_weight_kg: 2553.88,
-        weight_gap_score: 0.012038684719535784,
-        declared_weight_kg: 2585.0,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:12:10.695Z",
-    },
-    {
-      transactionId: "SW_LIVE_888A31E7",
-      senderAccount: "ACC_000098",
-      receiverAccount: "ACC_000066",
-      amount: 55989.36,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 1780,
-        doc_id: "DOC_LIVE_0986DF98",
-        commodity: "Grain",
-        ais_status: "ON",
-        market_avg: 30.0,
-        unit_price: 31.45,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0483333333333333,
-        actual_weight_kg: 3888.8,
-        weight_gap_score: 0.006945863125638406,
-        declared_weight_kg: 3916.0,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:12:12.727Z",
-    },
-    {
-      transactionId: "SW_LIVE_D19ACD25",
-      senderAccount: "ACC_000049",
-      receiverAccount: "ACC_000052",
-      amount: 9319.79,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 78,
-        doc_id: "DOC_LIVE_706F0AA3",
-        commodity: "Scrap Metal",
-        ais_status: "OFF",
-        market_avg: 120.0,
-        unit_price: 119.48,
-        port_log_status: "VERIFIED",
-        price_deviation: 0.9956666666666667,
-        actual_weight_kg: 170.83,
-        weight_gap_score: 0.004487179487179488,
-        declared_weight_kg: 171.6,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:12:15.944Z",
-    },
-    {
-      transactionId: "SW_LIVE_A0DC1B17",
-      senderAccount: "ACC_000090",
-      receiverAccount: "ACC_000059",
-      amount: 61008.02,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 1281,
-        doc_id: "DOC_LIVE_09251F03",
-        commodity: "Textiles",
-        ais_status: "ON",
-        market_avg: 50.0,
-        unit_price: 47.63,
-        port_log_status: "VERIFIED",
-        price_deviation: 0.9526,
-        actual_weight_kg: 2794.54,
-        weight_gap_score: 0.008395429706905117,
-        declared_weight_kg: 2818.2,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:12:17.628Z",
-    },
-    {
-      transactionId: "SW_LIVE_6EBEDD15",
-      senderAccount: "ACC_UNKNOWN_1563",
-      receiverAccount: "ACC_000026",
-      amount: 187427.31,
-      verdict: "CLEAN",
-      confidenceScore: 100.0,
-      strMetadata: {
-        qty: 1521,
-        doc_id: "DOC_LIVE_F1C97EB8",
-        commodity: "Scrap Metal",
-        ais_status: "ON",
-        market_avg: 120.0,
-        unit_price: 123.23,
-        port_log_status: "VERIFIED",
-        price_deviation: 1.0269166666666667,
-        actual_weight_kg: 3337.06,
-        weight_gap_score: 0.002731456577610424,
-        declared_weight_kg: 3346.2,
-      },
-      actionTaken: "Cleared for settlement.",
-      loggedAt: "2026-05-09T06:12:20.039Z",
-    },
-  ];
-
-  for (const txn of liveAuditLogs) {
-    await prisma.aml_audit_log.upsert({
-      where: { transactionId: txn.transactionId },
-      update: {
-        senderAccount: txn.senderAccount,
-        receiverAccount: txn.receiverAccount,
-        amount: txn.amount,
-        verdict: txn.verdict,
-        confidenceScore: txn.confidenceScore,
-        strMetadata: txn.strMetadata,
-        actionTaken: txn.actionTaken,
-        loggedAt: new Date(txn.loggedAt),
-      },
-      create: {
-        transactionId: txn.transactionId,
-        senderAccount: txn.senderAccount,
-        receiverAccount: txn.receiverAccount,
-        amount: txn.amount,
-        verdict: txn.verdict,
-        confidenceScore: txn.confidenceScore,
-        strMetadata: txn.strMetadata,
-        actionTaken: txn.actionTaken,
-        loggedAt: new Date(txn.loggedAt),
-      },
-    });
-  }
-
-  console.log("Seeding complete!");
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main();
