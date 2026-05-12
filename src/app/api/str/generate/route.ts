@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getUserRole } from "@/lib/getUserRole";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 type Payload = {
   accountHolder: string;
@@ -11,7 +12,7 @@ type Payload = {
 };
 
 type StructuredReport = {
-  executiveSummary: string;
+  executiveSummary: string;   
   transactionDetails: string;
   riskIndicators: string;
   analyticalInsights: string;
@@ -91,8 +92,8 @@ const normalizeModelSection = (title: string, value: unknown, fallback: string):
 export async function POST(request: Request) {
   try {
     // Ensure the caller is an authenticated, onboarded user.
-    const role = await getUserRole();
-    if (!role) {
+    const user = await getCurrentUser();
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
@@ -100,6 +101,23 @@ export async function POST(request: Request) {
 
     if (!payload.accountHolder || !payload.transactionId) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
+    }
+
+    const existingReport = await prisma.sTRReport.findUnique({
+      where: {
+        transactionId: payload.transactionId,
+      },
+      select: {
+        transactionId: true,
+      },
+    });
+
+    if (existingReport) {
+      return NextResponse.json({
+        report: fallbackReport(payload),
+        source: "existing",
+        alreadyGenerated: true,
+      });
     }
 
     const prompt = `Generate a Suspicious Transaction Report from the data below.

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import type { SuspiciousTransaction } from "@/types/aml";
 
-export function SuspiciousRowActions({ transaction }: { transaction: SuspiciousTransaction }) {
+export function SuspiciousRowActions({ transaction, userRole }: { transaction: SuspiciousTransaction; userRole?: string }) {
   const [open, setOpen] = useState(false);
   const [notifying, setNotifying] = useState(false);
   const [alreadyNotified, setAlreadyNotified] = useState(false);
@@ -38,7 +38,7 @@ export function SuspiciousRowActions({ transaction }: { transaction: SuspiciousT
       }
 
       setAlreadyNotified(true);
-      toast.success("Suspicious-case inquiry sent to compliance and originating bank.");
+      toast.success("Suspicious inquiry sent to accounts and compliance.");
       setOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to send suspicious-case inquiry.");
@@ -66,7 +66,7 @@ export function SuspiciousRowActions({ transaction }: { transaction: SuspiciousT
               onClick={() => void notifyOriginatingBank()}
               disabled={notifying || alreadyNotified}
             >
-              {notifying ? "Sending Inquiry..." : alreadyNotified ? "Already Notified" : "Send Inquiry to Bank + Compliance"}
+              {notifying ? "Sending notification..." : alreadyNotified ? "Already Notified" : "Notify Accounts & Compliance"}
             </Button>
             <Button
               className="w-full"
@@ -94,7 +94,23 @@ export function SuspiciousRowActions({ transaction }: { transaction: SuspiciousT
         size="sm"
         className="w-full justify-center"
         variant="secondary"
-        onClick={() => toast.success("Marked as legitimate.")}
+        onClick={async () => {
+          try {
+                  const res = await fetch("/api/str/mark", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ transactionId: transaction.transactionId, verdict: "CLEAN" }),
+                  });
+
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) throw new Error((data as any).error ?? "Failed to set verdict.");
+
+                  const time = (data?.updated?.loggedAt as string) ?? null;
+                  toast.success(time ? `Transaction marked CLEAN at ${new Date(time).toLocaleString()}.` : "Transaction marked CLEAN.");
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Unable to mark as CLEAN.");
+          }
+        }}
       >
         Mark as Legitimate
       </Button>
@@ -102,7 +118,23 @@ export function SuspiciousRowActions({ transaction }: { transaction: SuspiciousT
         size="sm"
         className="w-full justify-center"
         variant="destructive"
-        onClick={() => toast.warning("Transaction escalated to fraud queue.")}
+        onClick={async () => {
+          try {
+            const res = await fetch("/api/str/mark", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ transactionId: transaction.transactionId, verdict: "FRAUD" }),
+            });
+
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error((data as any).error ?? "Failed to set verdict.");
+
+            const time = (data?.updated?.loggedAt as string) ?? null;
+            toast.success(time ? `Transaction marked FRAUD at ${new Date(time).toLocaleString()} and escalated.` : "Transaction marked FRAUD and escalated.");
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Unable to mark as FRAUD.");
+          }
+        }}
       >
         Escalate to Fraud
       </Button>

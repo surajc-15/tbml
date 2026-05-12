@@ -6,7 +6,7 @@ import { HomeSection } from './sections/home-section';
 import { DashboardSection } from './sections/dashboard-section';
 import { ContactUsSection } from './sections/contact-section';
 import { AboutUsSection } from './sections/about-section';
-import { NewUserRegistrationSection } from './sections/new-user-section';
+import { ReportsSection } from './sections/reports-section';
 
 interface UserData {
   email: string;
@@ -38,8 +38,6 @@ export function DashboardPageClient({
       case 'dashboard':
         return (
           <DashboardSection
-            userRole={user.role}
-            userEmail={user.email}
             fraudSearch={fraudSearch}
             fraudPage={fraudPage}
             fraudMinRisk={fraudMinRisk}
@@ -49,13 +47,11 @@ export function DashboardPageClient({
         return <ContactUsSection />;
       case 'about-us':
         return <AboutUsSection />;
-      case 'new-user':
-        return <NewUserRegistrationSection createdBy={user.email} />;
+      case 'reports':  
+        return <ReportsSection />;
       default:
         return (
           <DashboardSection
-            userRole={user.role}
-            userEmail={user.email}
             fraudSearch={fraudSearch}
             fraudPage={fraudPage}
             fraudMinRisk={fraudMinRisk}

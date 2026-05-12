@@ -1,12 +1,13 @@
 'use client';
 
-import { BarChart3, FileText, UserPlus, LogOut, Menu, X } from 'lucide-react';
+import { BarChart3, LogOut, Menu, X, ShieldAlert, AlertTriangle, Zap, UserPlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
 interface DashboardSidebarProps {
   userRole?: string;
   userEmail?: string;
+  activeSection?: string;
 }
 
 interface NavItem {
@@ -16,14 +17,20 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-const navItems: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-  { id: 'new-user', label: 'New User', icon: UserPlus },
-  { id: 'reports', label: 'Reports', icon: FileText, adminOnly: true },
+const adminNavItems: NavItem[] = [
+  { id: 'dashboard', label: 'Fraud Cases', icon: ShieldAlert },
+  { id: 'analytics', label: 'Insights', icon: BarChart3 },
+  { id: 'bank-users', label: 'Bank Users', icon: UserPlus, adminOnly: true },
 ];
 
-export function DashboardSidebar({ userRole, userEmail }: DashboardSidebarProps) {
-  const [activeSection, setActiveSection] = useState<string>('dashboard');
+const bankUserNavItems: NavItem[] = [
+  { id: 'fraud', label: 'Fraud Transactions', icon: ShieldAlert },
+  { id: 'suspicious', label: 'Suspicious Transactions', icon: AlertTriangle },
+  { id: 'analytics', label: 'Insights', icon: BarChart3 },
+  { id: 'simulate', label: 'Simulate Transaction', icon: Zap },
+];
+
+export function DashboardSidebar({ userRole, activeSection = 'dashboard' }: DashboardSidebarProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const router = useRouter();
 
@@ -39,7 +46,6 @@ export function DashboardSidebar({ userRole, userEmail }: DashboardSidebarProps)
   }, []);
 
   const handleNavClick = (sectionId: string) => {
-    setActiveSection(sectionId);
     setIsSidebarOpen(false);
     // Navigate with query param to track active section
     router.push(`/dashboard?section=${sectionId}`);
@@ -50,9 +56,7 @@ export function DashboardSidebar({ userRole, userEmail }: DashboardSidebarProps)
     router.push('/sign-in');
   };
 
-  const visibleItems = navItems.filter(
-    (item) => !item.adminOnly || userRole === 'ADMIN'
-  );
+  const visibleItems = userRole === 'ADMIN' ? adminNavItems : bankUserNavItems;
 
   return (
     <>

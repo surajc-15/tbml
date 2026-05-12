@@ -5,11 +5,32 @@ import jsPDF from "jspdf";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { FraudAccount, StrReport } from "@/types/aml";
 
 type StrApiResponse = {
+  alreadyGenerated?: boolean;
+  source?: string;
   report?: {
+    id?: number;
+    transactionId?: string;
+    createdAt?: string;
+    actionTaken?: string;
+    createdById?: string;
+    createdBy?: {
+      email?: string | null;
+      name?: string | null;
+      username?: string | null;
+    } | null;
+    reportMarkdown?: string | null;
     executiveSummary?: unknown;
     transactionDetails?: unknown;
     riskIndicators?: unknown;
@@ -80,13 +101,62 @@ function reportSections(report: StrReport): Array<{ title: string; content: stri
   ];
 }
 
-export function FraudRowActions({ account }: { account: FraudAccount }) {
+function parseStoredReportMarkdown(markdown: string): StrReport {
+  const sections: Record<string, string> = {};
+  let currentTitle: string | null = null;
+  let buffer: string[] = [];
+
+  const commit = () => {
+    if (currentTitle) {
+      sections[currentTitle] = buffer.join("\n").trim();
+    }
+    buffer = [];
+  };
+
+  markdown.split(/\r?\n/).forEach((line) => {
+    const headingMatch = line.match(/^#{1,6}\s+(.*)$/);
+    if (headingMatch) {
+      commit();
+      currentTitle = headingMatch[1].trim();
+      return;
+    }
+
+    buffer.push(line);
+  });
+
+  commit();
+
+  const pick = (...titles: string[]) => titles.map((title) => sections[title]).find(Boolean) ?? "";
+
+  return {
+    executiveSummary: pick("Executive Summary"),
+    transactionDetails: pick("Transaction Details"),
+    riskIndicators: pick("Risk Indicators"),
+    analyticalInsights: pick("Analytical Insights"),
+    recommendation: pick("Recommendation"),
+    professionalNotice: pick("Professional Notice"),
+  };
+}
+
+export function FraudRowActions({ account, userRole }: { account: FraudAccount; userRole?: string }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notifying, setNotifying] = useState(false);
-  const [alreadyNotified, setAlreadyNotified] = useState(false);
+  const [actionLoading, setActionLoading] = useState<"freeze" | "documents" | null>(null);
+  const [alreadyNotified, setAlreadyNotified] = useState(Boolean(account.hasStrReport));
   const [showReport, setShowReport] = useState(false);
   const [report, setReport] = useState<StrReport | null>(null);
+  const [storedReportMeta, setStoredReportMeta] = useState<{
+    createdAt?: string;
+    actionTaken?: string;
+    createdByEmail?: string | null;
+    createdByName?: string | null;
+    createdByUsername?: string | null;
+  } | null>(null);
+
+  const metadataEntries = Object.entries(account.strMetadata ?? {}).filter(([key]) => key !== "reasons_for_flagging");
+  const primaryMetrics = metadataEntries.slice(0, 8);
 
   const generateReport = async () => {
     try {
@@ -111,7 +181,7 @@ export function FraudRowActions({ account }: { account: FraudAccount }) {
       const data = (await response.json()) as StrApiResponse;
       setReport(normalizeReport(data));
       setShowReport(false);
-      toast.success("STR report generated successfully.");
+      toast.success(data.alreadyGenerated ? "STR report already existed and was loaded." : "STR report generated successfully.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not generate report.");
     } finally {
@@ -327,7 +397,7 @@ export function FraudRowActions({ account }: { account: FraudAccount }) {
       }
 
       setAlreadyNotified(true);
-      toast.success("Urgent fraud alert sent to compliance and originating bank.");
+      toast.success("Urgent fraud alert sent and STR report stored for this transaction.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to send notification.");
     } finally {
@@ -335,20 +405,83 @@ export function FraudRowActions({ account }: { account: FraudAccount }) {
     }
   };
 
+  const sendActionRequest = async (actionType: "freeze" | "documents") => {
+    try {
+      setActionLoading(actionType);
+      const response = await fetch("/api/str/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType, account }),
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Unable to process action request.");
+      }
+
+      toast.success(
+        payload.message ??
+          (actionType === "freeze"
+            ? "Freeze request sent to sender and receiver banks."
+            : "Document request sent to sender and receiver banks."),
+      );
+      setIsActionDialogOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to process action request.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const loadStoredReport = async () => {
+    try {
+      setLoading(true);
+      setIsOpen(true);
+      const res = await fetch("/api/str/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId: account.transactionId }),
+      });
+      if (!res.ok) throw new Error("Failed to load stored STR");
+      const data = (await res.json()) as StrApiResponse;
+      const storedReport = data.report;
+      if (!storedReport) {
+        throw new Error("Stored STR report missing");
+      }
+      const md = storedReport.reportMarkdown ?? "";
+      setReport(parseStoredReportMarkdown(md));
+      setStoredReportMeta({
+        createdAt: storedReport.createdAt,
+        actionTaken: storedReport.actionTaken,
+        createdByEmail: storedReport.createdBy?.email ?? null,
+        createdByName: storedReport.createdBy?.name ?? null,
+        createdByUsername: storedReport.createdBy?.username ?? null,
+      });
+      setShowReport(true);
+    } catch (err) {
+      toast.error("Could not load stored STR report.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-      <Button
-        size="sm"
-        className="w-full justify-center"
-        onClick={() => {
-          setIsOpen(true);
-          if (!report) {
-            void generateReport();
-          }
-        }}
-      >
-        Generate STR Report
-      </Button>
+      {userRole === "BANK_USER" && (
+        <Button
+          size="sm"
+          className="w-full justify-center"
+          onClick={() => {
+            setIsOpen(true);
+            if (!report) {
+              void generateReport();
+            }
+          }}
+          disabled={loading || alreadyNotified}
+        >
+          Generate STR Report
+        </Button>
+      )}
       <Button
         size="sm"
         className="w-full justify-center"
@@ -356,16 +489,78 @@ export function FraudRowActions({ account }: { account: FraudAccount }) {
         onClick={() => void notifyStakeholders()}
         disabled={notifying || alreadyNotified}
       >
-        {notifying ? "Sending Fraud Alert..." : alreadyNotified ? "Fraud Alert Sent" : "Send Urgent Fraud Alert"}
+        {notifying
+          ? "Sending Fraud Alert..."
+          : alreadyNotified
+            ? "STR Report Exists"
+            : "Send Urgent Fraud Alert"}
       </Button>
-      <Button
-        size="sm"
-        className="w-full justify-center"
-        variant="destructive"
-        onClick={() => toast.warning(`Account ${account.accountId} frozen.`)}
-      >
-        Freeze Account
-      </Button>
+      {userRole === "ADMIN" && (
+        <Dialog open={isActionDialogOpen} onOpenChange={setIsActionDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="w-full justify-center" variant="destructive">
+              Take Actions
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Transaction Action Center</DialogTitle>
+              <DialogDescription>
+                Review details and trigger actions for {account.transactionId}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+                <p><strong>Account:</strong> {account.accountId}</p>
+                <p><strong>Amount:</strong> ${account.amount.toLocaleString()}</p>
+                <p><strong>Route:</strong> {account.country}</p>
+                <p><strong>Risk Score:</strong> {account.riskScore.toFixed(2)}</p>
+                <p className="md:col-span-2"><strong>Indicators:</strong> {account.riskIndicators.join(" | ")}</p>
+                <p className="md:col-span-2"><strong>Trade Notes:</strong> {account.tradeDetails}</p>
+              </div>
+
+              {primaryMetrics.length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <h4 className="text-sm font-semibold text-slate-800 mb-3">Structured Metrics</h4>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {primaryMetrics.map(([key, value]) => (
+                      <div key={key} className="rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                        <span className="font-medium text-slate-700">{key.replace(/_/g, " ")}:</span>{" "}
+                        <span className="text-slate-900">{String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button
+                  variant="destructive"
+                  disabled={actionLoading !== null}
+                  onClick={() => void sendActionRequest("freeze")}
+                >
+                  {actionLoading === "freeze" ? "Sending Freeze Request..." : "Freeze Account (Notify Banks)"}
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={actionLoading !== null}
+                  onClick={() => void sendActionRequest("documents")}
+                >
+                  {actionLoading === "documents" ? "Requesting Documents..." : "Get More Records / Request Documents"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {!userRole || userRole !== "ADMIN" ? (
+        alreadyNotified && (
+          <Button size="sm" className="w-full justify-center" onClick={() => void loadStoredReport()}>
+            View Transaction Details
+          </Button>
+        )
+      ) : null}
 
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetContent>
@@ -397,26 +592,65 @@ export function FraudRowActions({ account }: { account: FraudAccount }) {
 
             {report && showReport && (
               <div className="space-y-5 rounded-xl border border-slate-200 bg-white overflow-hidden">
-                {/* Header section */}
-                <div className="sticky top-0 z-10 -mx-4 -mt-4 border-b border-sky-200 bg-gradient-to-r from-sky-50 via-white to-amber-50 px-4 py-5 shadow-sm">
+                <div className="border-b border-sky-200 bg-gradient-to-r from-sky-50 via-white to-amber-50 px-5 py-5 shadow-sm">
                   <div className="flex items-start gap-4">
                     <div className="flex h-16 w-16 items-center justify-center rounded-full bg-linear-to-br from-sky-700 to-sky-900 text-xs font-black tracking-widest text-white shadow-md">
                       DCAF
                     </div>
                     <div className="space-y-2 flex-1">
-                      <p className="text-xs font-bold uppercase tracking-widest text-sky-700">Official Investigative Notice</p>
-                      <h4 className="text-xl font-black text-slate-950 leading-tight">Department of Compliance and Anti Money Laundering</h4>
+                      <p className="text-xs font-bold uppercase tracking-widest text-sky-700">Transaction Detail View</p>
+                      <h4 className="text-xl font-black text-slate-950 leading-tight">{account.transactionId}</h4>
                       <p className="text-xs font-medium text-slate-600">
-                        Case Ref: {account.transactionId} | Account: {account.accountId} | Generated: {new Date().toLocaleString()}
+                        Clean summary of the transaction, stored STR metadata, and compliance analysis.
                       </p>
                     </div>
                   </div>
                   <div className="mt-4 h-0.5 w-full bg-gradient-to-r from-sky-300 via-amber-200 to-transparent" />
                 </div>
 
-                {/* Content sections */}
-                <div className="p-5 space-y-5">
+                <div className="grid gap-4 px-5 pt-5 md:grid-cols-2">
+                  <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <h4 className="text-sm font-semibold text-slate-900">Transaction Summary</h4>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 text-sm text-slate-700">
+                      <div><span className="font-medium text-slate-500">Sender</span><div>{account.senderAccount}</div></div>
+                      <div><span className="font-medium text-slate-500">Receiver</span><div>{account.receiverAccount}</div></div>
+                      <div><span className="font-medium text-slate-500">Amount</span><div>${account.amount.toLocaleString()}</div></div>
+                      <div><span className="font-medium text-slate-500">Risk Score</span><div>{account.riskScore.toFixed(2)}</div></div>
+                      <div className="sm:col-span-2"><span className="font-medium text-slate-500">Route</span><div>{account.country}</div></div>
+                      <div className="sm:col-span-2"><span className="font-medium text-slate-500">Commodity</span><div>{account.commodity ?? "N/A"}</div></div>
+                    </div>
+                  </section>
 
+                  <section className="rounded-xl border border-slate-200 bg-white p-4">
+                    <h4 className="text-sm font-semibold text-slate-900">STR Metadata</h4>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 text-sm text-slate-700">
+                      <div><span className="font-medium text-slate-500">Created At</span><div>{storedReportMeta?.createdAt ? new Date(storedReportMeta.createdAt).toLocaleString() : "Unknown"}</div></div>
+                      <div><span className="font-medium text-slate-500">Action Taken</span><div>{storedReportMeta?.actionTaken ?? "Unknown"}</div></div>
+                      <div><span className="font-medium text-slate-500">Created By</span><div>{storedReportMeta?.createdByName ?? storedReportMeta?.createdByUsername ?? storedReportMeta?.createdByEmail ?? "Unknown"}</div></div>
+                      <div><span className="font-medium text-slate-500">STR Status</span><div>{account.hasStrReport ? "Stored and available" : "Not stored"}</div></div>
+                    </div>
+                  </section>
+                </div>
+
+                {Object.keys(account.strMetadata ?? {}).length > 0 && (
+                  <div className="px-5">
+                    <section className="rounded-xl border border-slate-200 bg-white p-4">
+                      <h4 className="text-sm font-semibold text-slate-900">Audit Metadata</h4>
+                      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {Object.entries(account.strMetadata ?? {})
+                          .filter(([key]) => key !== "reasons_for_flagging")
+                          .map(([key, value]) => (
+                            <div key={key} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{key.replace(/_/g, " ")}</div>
+                              <div className="mt-1 text-slate-900">{String(value)}</div>
+                            </div>
+                          ))}
+                      </div>
+                    </section>
+                  </div>
+                )}
+
+                <div className="px-5 pb-5 space-y-5">
                 {reportSections(report).map((section, index) => {
                   const palette = [
                     "border-sky-100 bg-sky-50/60",
@@ -435,16 +669,20 @@ export function FraudRowActions({ account }: { account: FraudAccount }) {
                     "text-slate-900",
                   ];
 
+                  const lines = sectionLines(section.content);
+
                   return (
                     <section key={section.title} className={`rounded-lg border p-3 ${palette[index % palette.length]}`}>
                       <h4 className={`font-bold ${heading[index % heading.length]}`}>{section.title}</h4>
                       <ul className="mt-2 space-y-2 text-justify text-sm leading-7 text-slate-700">
-                        {sectionLines(section.content).map((line, lineIndex) => (
+                        {lines.length > 0 ? lines.map((line, lineIndex) => (
                           <li key={`${section.title}-${lineIndex}`} className="flex gap-2">
                             <span className="mt-[10px] h-1.5 w-1.5 shrink-0 rounded-full bg-slate-500" />
                             <span>{line}</span>
                           </li>
-                        ))}
+                        )) : (
+                          <li className="text-slate-500">No details provided.</li>
+                        )}
                       </ul>
                     </section>
                   );
@@ -468,7 +706,7 @@ export function FraudRowActions({ account }: { account: FraudAccount }) {
 
             {alreadyNotified && (
               <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-                Already notified: compliance and originating bank have received the fraud alert.
+                Notification already sent and STR report is stored for this transaction.
               </p>
             )}
           </div>

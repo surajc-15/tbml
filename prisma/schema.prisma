@@ -6,37 +6,56 @@ datasource db {
   provider = "postgresql"
 }
 
-// ----------------------------------------------------
-// TBML Application Tables
-// ----------------------------------------------------
-
-enum Role {
-  ADMIN
-  ANALYST
-  BANK_USER
-}
-
 model User {
-  id           String   @id @default(uuid())
-  username     String?  @unique
-  email        String   @unique
+  id           String      @id @default(uuid())
+  email        String      @unique
+  role         Role        @default(BANK_USER)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  bankName     String?
   name         String?
   passwordHash String?
-  bankName     String?
-  role         Role     @default(BANK_USER)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  username     String?     @unique
+  strReports   STRReport[]
 }
 
 model aml_audit_log {
-  id               Int      @id @default(autoincrement())
-  transactionId    String   @unique @map("transaction_id")
-  senderAccount    String?  @map("sender_account")
-  receiverAccount  String?  @map("receiver_account")
-  amount           Decimal  @db.Decimal(15, 6)
-  verdict          String
-  confidenceScore  Decimal  @db.Decimal(10, 6) @map("confidence_score")
-  strMetadata      Json?    @map("str_metadata")
-  actionTaken      String?  @map("action_taken")
-  loggedAt         DateTime @default(now()) @map("logged_at")
+  id              Int        @id @default(autoincrement())
+  transactionId   String     @unique @map("transaction_id")
+  senderAccount   String?    @map("sender_account")
+  receiverAccount String?    @map("receiver_account")
+  amount          Decimal    @db.Decimal(15, 6)
+  verdict         String
+  confidenceScore Decimal    @map("confidence_score") @db.Decimal(10, 6)
+  strMetadata     Json?      @map("str_metadata")
+  actionTaken     String?    @map("action_taken")
+  loggedAt        DateTime   @default(now()) @map("logged_at")
+  strReport       STRReport?
+
+  @@map("aml_audit_log")
+}
+
+model STRReport {
+  id             Int           @id @default(autoincrement())
+  transactionId  String        @unique @map("transaction_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  actionTaken    STRAction     @map("action_taken")
+  createdById    String        @map("created_by_id")
+  reportMarkdown String?       @map("report_markdown")
+  createdBy      User          @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  amlAuditLog    aml_audit_log @relation(fields: [transactionId], references: [transactionId], onDelete: Cascade)
+
+  @@map("str_reports")
+}
+
+enum Role {
+  ADMIN
+  BANK_USER
+  ANALYST
+}
+
+enum STRAction {
+  FREEZE_ACCOUNT
+  GET_DOCUMENTS
+  MARK_AS_CLEAN
 }

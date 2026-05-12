@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
 import {
   buildFraudBankAlertTemplate,
@@ -77,7 +79,7 @@ const isValidSuspiciousTransaction = (value: unknown): value is SuspiciousTransa
     hasString(transaction.receiver) &&
     typeof transaction.amount === "number" &&
     hasString(transaction.tradeType) &&
-    hasString(transaction.suspicionReason) &&
+    // suspicionReason is optional in notifications; originating bank is helpful but not mandatory
     hasString(transaction.originatingBank)
   );
 };
@@ -212,9 +214,55 @@ export async function POST(request: Request) {
         { status: 502 },
       );
     }
+    // Persist STR report so admin views can pick it up (createdBy from current user when available)
+    try {
+      const currentUser = await getCurrentUser();
+      const createdById = currentUser?.sub ?? process.env.DEFAULT_STR_CREATOR_ID;
+
+      if (!createdById) {
+        // If no creator id available, skip persisting but still return success for emails
+        return NextResponse.json({
+          message: "Fraud alert sent to compliance and originating bank. STR report not persisted (no creator id).",
+          complianceEmailId: complianceResult.data?.id,
+          bankEmailId: bankResult.data?.id,
+        });
+      }
+
+      // Build a simple markdown payload from the report
+      const mdSections = [
+        `# Executive Summary\n${payload.account ? payload.report?.executiveSummary ?? "" : ""}`,
+        `## Transaction Details\n${payload.account ? payload.report?.transactionDetails ?? "" : ""}`,
+        `## Risk Indicators\n${payload.account ? payload.report?.riskIndicators ?? "" : ""}`,
+        `## Recommendation\n${payload.account ? payload.report?.recommendation ?? "" : ""}`,
+      ].join("\n\n");
+
+      // Upsert STRReport so repeated notifications don't create duplicates
+      await prisma.sTRReport.upsert({
+        where: { transactionId: payload.account!.transactionId },
+        update: {
+          reportMarkdown: mdSections,
+          actionTaken: "GET_DOCUMENTS",
+          createdById,
+        },
+        create: {
+          transactionId: payload.account!.transactionId,
+          reportMarkdown: mdSections,
+          actionTaken: "GET_DOCUMENTS",
+          createdById,
+        },
+      });
+    } catch (err) {
+      // Persisting report failed; continue to return success for notification but include a note
+      return NextResponse.json({
+        message: "Fraud alert sent to compliance and originating bank.",
+        complianceEmailId: complianceResult.data?.id,
+        bankEmailId: bankResult.data?.id,
+        note: "Failed to persist STR report.",
+      });
+    }
 
     return NextResponse.json({
-      message: "Fraud alert sent to compliance and originating bank.",
+      message: "Fraud alert sent to compliance and originating bank; STR report persisted.",
       complianceEmailId: complianceResult.data?.id,
       bankEmailId: bankResult.data?.id,
     });

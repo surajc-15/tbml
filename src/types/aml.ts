@@ -11,7 +11,12 @@ export type FraudAccount = {
   riskScore: number;
   riskIndicators: string[];
   tradeDetails: string;
+  strMetadata?: Record<string, unknown>;
   status: "high";
+  senderAccount?: string;
+  receiverAccount?: string;
+  commodity?: string;
+  hasStrReport?: boolean;
 };
 
 export type StrReport = {
@@ -34,6 +39,9 @@ export type SuspiciousTransaction = {
   suspicionReason: string;
   riskLevel: "medium";
   status: FraudStatus;
+  senderAccount?: string;
+  receiverAccount?: string;
+  commodity?: string;
 };
 
 export type NotificationCase = "fraud" | "suspicious";

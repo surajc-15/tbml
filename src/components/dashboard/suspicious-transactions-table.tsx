@@ -4,25 +4,121 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchFilter } from "@/components/ui/search-filter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { suspiciousTransactions } from "@/lib/mock-data";
+import { prisma } from "@/lib/prisma";
 import { SuspiciousRowActions } from "@/components/dashboard/suspicious-row-actions";
+import type { SuspiciousTransaction } from "@/types/aml";
+import { getBankCode, transactionInvolvesBank } from "@/lib/bank-utils";
 
 type Props = {
+  userRole?: string;
+  userBank?: string;
   query?: string;
   page?: number;
 };
 
 const PAGE_SIZE = 4;
 
-export async function SuspiciousTransactionsTable({ query = "", page = 1 }: Props) {
+type AuditRow = {
+  transactionId: string;
+  senderAccount: string | null;
+  receiverAccount: string | null;
+  amount: unknown;
+  verdict: string;
+  actionTaken: string | null;
+  strMetadata: unknown;
+  loggedAt: Date;
+};
+
+const toText = (value: unknown): string | null => (typeof value === "string" && value.trim() ? value.trim() : null);
+
+const toMetadataRecord = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+};
+
+const parseReasons = (value: unknown): string[] => {
+  const metadata = toMetadataRecord(value);
+  const reasons = metadata.reasons_for_flagging;
+
+  if (Array.isArray(reasons)) {
+    return reasons.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean);
+  }
+
+  if (typeof reasons === "string" && reasons.trim()) {
+    return [reasons.trim()];
+  }
+
+  return [];
+};
+
+const mapAuditRowToSuspiciousTransaction = (row: AuditRow): SuspiciousTransaction => {
+  const metadata = toMetadataRecord(row.strMetadata);
+  const reasons = parseReasons(row.strMetadata);
+  const sender = toText(row.senderAccount) ?? "Unknown Sender";
+  const receiver = toText(row.receiverAccount) ?? "Unknown Receiver";
+  const commodity = toText((metadata as Record<string, unknown>).commodity as unknown) ?? "N/A";
+
+  return {
+    transactionId: row.transactionId,
+    sender,
+    receiver,
+    originatingBank: "Originating Bank",
+    originatingBankEmail: toText(metadata.originatingBankEmail) ?? undefined,
+    amount: Number(row.amount),
+    tradeType: toText(metadata.tradeType) ?? toText(row.actionTaken) ?? "Trade transfer",
+    suspicionReason: reasons[0] ?? toText(row.actionTaken) ?? "Transaction flagged for review.",
+    riskLevel: "medium",
+    status: "suspicious",
+    commodity,
+    senderAccount: sender,
+    receiverAccount: receiver,
+  };
+};
+
+export async function SuspiciousTransactionsTable({ userRole, userBank = "", query = "", page = 1 }: Props) {
   const normalized = query.toLowerCase();
-  const filtered = suspiciousTransactions.filter((item) => {
+  const userBankCode = getBankCode(userBank);
+  let rows: AuditRow[] = [];
+
+  try {
+    rows = (await prisma.aml_audit_log.findMany({
+      where: {
+        verdict: {
+          // use WATCHLIST as the DB verdict for suspicious-like records
+          equals: "WATCHLIST",
+          mode: "insensitive",
+        },
+      },
+      orderBy: {
+        loggedAt: "desc",
+      },
+    })) as AuditRow[];
+  } catch {
+    rows = [];
+  }
+
+  const sourceTransactions = rows.map(mapAuditRowToSuspiciousTransaction);
+
+  // Filter by bank if userBank is provided (for bank users)
+  const bankFiltered = userBankCode
+    ? sourceTransactions.filter((item) =>
+        transactionInvolvesBank(
+          item.senderAccount || item.sender,
+          item.receiverAccount || item.receiver,
+          userBankCode
+        )
+      )
+    : sourceTransactions;
+
+  const filtered = bankFiltered.filter((item) => {
     return (
       item.transactionId.toLowerCase().includes(normalized) ||
       item.sender.toLowerCase().includes(normalized) ||
       item.receiver.toLowerCase().includes(normalized) ||
-      item.tradeType.toLowerCase().includes(normalized) ||
-      item.suspicionReason.toLowerCase().includes(normalized)
+      item.tradeType.toLowerCase().includes(normalized)
     );
   });
 
@@ -63,9 +159,8 @@ export async function SuspiciousTransactionsTable({ query = "", page = 1 }: Prop
                     <TableHead>Sender</TableHead>
                     <TableHead>Receiver</TableHead>
                     <TableHead>Amount</TableHead>
+                    <TableHead>Commodity</TableHead>
                     <TableHead>Trade Type</TableHead>
-                    <TableHead>Suspicion Reason</TableHead>
-                    <TableHead>Risk Level</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -76,13 +171,10 @@ export async function SuspiciousTransactionsTable({ query = "", page = 1 }: Prop
                       <TableCell>{txn.sender}</TableCell>
                       <TableCell>{txn.receiver}</TableCell>
                       <TableCell>${txn.amount.toLocaleString()}</TableCell>
+                      <TableCell>{txn.commodity}</TableCell>
                       <TableCell>{txn.tradeType}</TableCell>
-                      <TableCell className="max-w-80 text-pretty">{txn.suspicionReason}</TableCell>
-                      <TableCell>
-                        <Badge variant="suspicious">Medium</Badge>
-                      </TableCell>
                       <TableCell className="min-w-[640px]">
-                        <SuspiciousRowActions transaction={txn} />
+                        <SuspiciousRowActions transaction={txn} userRole={userRole} />
                       </TableCell>
                     </TableRow>
                   ))}

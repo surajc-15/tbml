@@ -3,61 +3,97 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { DashboardSection } from './sections/dashboard-section';
 import { NewUserRegistrationSection } from './sections/new-user-section';
 import { DashboardSidebar } from './dashboard-sidebar';
-import { FileText } from 'lucide-react';
+import { AnalyticsSection } from './sections/analytics-section';
+import { BankUserDashboardView } from './bank-user-dashboard-view';
+import { TransactionSimulationPanel } from './transaction-simulation-panel';
+import { FlaggedFraudTable } from './flagged-fraud-table';
+import { SuspiciousTransactionsTable } from './suspicious-transactions-table';
 
 interface DashboardLayoutProps {
   userRole?: string;
   userEmail?: string;
+  userBank?: string;
   fraudSearch: string;
   fraudPage: number;
   fraudMinRisk: number;
+  suspiciousSearch?: string;
+  suspiciousPage?: number;
+  analyticsRange?: 'week' | 'month';
   activeSection?: string;
 }
 
 export async function DashboardLayout({
   userRole,
   userEmail,
+  userBank = '',
   fraudSearch,
   fraudPage,
   fraudMinRisk,
+  suspiciousSearch = '',
+  suspiciousPage = 1,
+  analyticsRange = 'week',
   activeSection = 'dashboard',
 }: DashboardLayoutProps) {
-  const renderSection = () => {
-    switch (activeSection) {
-      case 'new-user':
-        return <NewUserRegistrationSection createdBy={userEmail || ''} />;
-      case 'reports':
-        return (
-          <div className="p-8">
-            <h1 className="text-3xl font-bold text-slate-900 mb-6">Reports</h1>
-            <div className="bg-white rounded-lg border border-slate-200 p-8 text-center">
-              <FileText className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-              <p className="text-slate-600">Reports section coming soon</p>
-            </div>
-          </div>
-        );
-      case 'dashboard':
-      default:
-        return (
-          <DashboardSection
-            userRole={userRole}
-            userEmail={userEmail}
-            fraudSearch={fraudSearch}
-            fraudPage={fraudPage}
-            fraudMinRisk={fraudMinRisk}
-          />
-        );
-    }
-  };
+  const isAdmin = userRole === 'ADMIN';
 
   return (
     <div className="flex h-full min-h-screen bg-slate-50">
-      <DashboardSidebar userRole={userRole} userEmail={userEmail} />
+      <DashboardSidebar userRole={userRole} activeSection={activeSection} />
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
         <Suspense fallback={<LoadingSpinner />}>
-          {renderSection()}
+          {isAdmin ? (
+            // Admin sections
+            activeSection === 'analytics' ? (
+              <AnalyticsSection range={analyticsRange} />
+            ) : activeSection === 'bank-users' ? (
+              <NewUserRegistrationSection createdBy={userEmail || ''} />
+            ) : (
+              <DashboardSection
+                fraudSearch={fraudSearch}
+                fraudPage={fraudPage}
+                fraudMinRisk={fraudMinRisk}
+              />
+            )
+          ) : (
+            // Bank user sections
+            activeSection === 'analytics' ? (
+              <AnalyticsSection range={analyticsRange} />
+            ) : activeSection === 'suspicious' ? (
+              <div className="w-full h-full p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto fade-up">
+                <SuspiciousTransactionsTable 
+                  userBank={userBank}
+                  query={suspiciousSearch} 
+                  page={suspiciousPage} 
+                />
+              </div>
+            ) : activeSection === 'fraud' ? (
+              <div className="w-full h-full p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto fade-up">
+                <FlaggedFraudTable
+                  userRole="BANK_USER"
+                  userBank={userBank}
+                  query={fraudSearch}
+                  page={fraudPage}
+                  minRisk={fraudMinRisk}
+                />
+              </div>
+            ) : activeSection === 'simulate' ? (
+              <div className="w-full h-full p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto fade-up">
+                <TransactionSimulationPanel />
+              </div>
+            ) : (
+              // Default dashboard view showing both fraud and suspicious
+              <BankUserDashboardView
+                userBank={userBank}
+                fraudSearch={fraudSearch}
+                fraudPage={fraudPage}
+                fraudMinRisk={fraudMinRisk}
+                suspiciousSearch={suspiciousSearch}
+                suspiciousPage={suspiciousPage}
+              />
+            )
+          )}
         </Suspense>
       </main>
     </div>
