@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { normalizeLoginIdentifier, setAuthSession, verifyPassword } from '@/lib/auth';
-import type { Role } from '@prisma/client';
+// import type { Role } from '@prisma/client';
 
 type LoginBody = {
   identifier?: string;
   password?: string;
 };
+
+
+type Role =
+  | "ADMIN"
+  | "BANK_USER"
+  | "ANALYST";
+
 
 export async function POST(request: Request) {
   try {
